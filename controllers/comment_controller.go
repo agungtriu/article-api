@@ -87,7 +87,7 @@ func UpdateCommentController(c echo.Context) error {
 	}
 
 	if userId != comment.UserId {
-		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
+		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})
@@ -138,7 +138,7 @@ func DeleteCommentController(c echo.Context) error {
 	}
 
 	if userId != comment.UserId {
-		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
+		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})

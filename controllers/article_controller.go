@@ -65,7 +65,6 @@ func GetArticleController(c echo.Context) error {
 		})
 	}
 
-	// Maping to response
 	var articleResponse response.ArticleResponse
 	articleResponse.MapArticleFromDatabase(article)
 
@@ -125,7 +124,7 @@ func UpdateArticleController(c echo.Context) error {
 	}
 
 	if userId != article.UserId {
-		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
+		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})
@@ -168,7 +167,7 @@ func DeleteArticleController(c echo.Context) error {
 	}
 
 	if userId != article.UserId {
-		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
+		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})

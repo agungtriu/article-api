@@ -94,15 +94,7 @@ func RegisterController(c echo.Context) error {
 	}
 
 	profile := profiledatabase.Profile{Name: "", Bio: "", UserId: int(user.ID)}
-	resultProfile := configs.DB.Create(&profile)
-
-	if resultProfile.Error != nil {
-		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
-			Status: false,
-			Error:  result.Error,
-		})
-
-	}
+	configs.DB.Create(&profile)
 
 	var registerResponse response.RegisterResponse
 	registerResponse.MapRegisterFromDatabase(user)
