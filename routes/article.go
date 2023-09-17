@@ -2,6 +2,7 @@ package routes
 
 import (
 	"article-api/controllers"
+	"os"
 
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
@@ -13,7 +14,7 @@ func ArticleRoute(e *echo.Echo) {
 	eArticles.GET("/:articleId", controllers.GetArticleController)
 
 	eAuth := eArticles.Group("")
-	eAuth.Use(echojwt.JWT([]byte("123")))
+	eAuth.Use(echojwt.JWT([]byte(os.Getenv("PRIVATE_KEY_JWT"))))
 	eAuth.POST("", controllers.AddArticleController)
 
 	eAuthArticle := eAuth.Group("/:articleId")
