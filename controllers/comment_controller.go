@@ -44,8 +44,8 @@ func AddCommentController(c echo.Context) error {
 		})
 	}
 
-	var responseComment response.Comment
-	responseComment.MapCommentFromDatabase(comment)
+	var responseComment response.AddComment
+	responseComment.MapAddCommentFromDatabase(comment)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
@@ -63,8 +63,8 @@ func UpdateCommentController(c echo.Context) error {
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 	commentId, _ := strconv.Atoi(c.Param("commentId"))
 
-	var commentRequest request.Comment
-	c.Bind(&commentRequest)
+	var requestComment request.Comment
+	c.Bind(&requestComment)
 
 	repository := repository.NewRepository(configs.DB)
 	_, err := repository.VerifyArticle(articleId)
@@ -92,7 +92,7 @@ func UpdateCommentController(c echo.Context) error {
 		})
 	}
 
-	comment, err = repository.PutComment(commentId, userId, articleId, commentRequest)
+	comment, err = repository.PutComment(commentId, userId, articleId, requestComment)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,

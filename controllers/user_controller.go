@@ -105,13 +105,13 @@ func RegisterController(c echo.Context) error {
 
 	}
 
-	var registerResponse response.Register
-	registerResponse.MapRegisterFromDatabase(user)
+	var responseRegister response.Register
+	responseRegister.MapRegisterFromDatabase(user)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
 		Message: "Success register user",
-		Data:    registerResponse,
+		Data:    responseRegister,
 	})
 
 }
@@ -154,13 +154,13 @@ func LoginController(c echo.Context) error {
 		})
 	}
 
-	var loginResponse response.Login
-	loginResponse.MapLoginFromDatabase(user)
+	var responseLogin response.Login
+	responseLogin.MapLoginFromDatabase(user)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
 		Message: "Success login user",
-		Data:    loginResponse,
+		Data:    responseLogin,
 	})
 
 }
@@ -178,13 +178,13 @@ func GetUserController(c echo.Context) error {
 		})
 	}
 
-	var userResponse response.User
-	userResponse.MapUserFromDatabase(user)
+	var responseUser response.User
+	responseUser.MapUserFromDatabase(user)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
 		Message: "Success get data user",
-		Data:    userResponse,
+		Data:    responseUser,
 	})
 }
 
