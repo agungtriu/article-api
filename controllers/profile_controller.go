@@ -4,9 +4,11 @@ import (
 	"article-api/configs"
 	"article-api/middlewares"
 	"article-api/models/base"
-	profiledatabase "article-api/models/profile/database"
-	profileRequest "article-api/models/profile/request"
+	"article-api/models/profile/request"
+	"article-api/repository"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -16,24 +18,23 @@ func ChangeProfileController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
-	userId := claims["userId"]
+	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 
-	var changeProfile profileRequest.UserChangeProfile
-	c.Bind(&changeProfile)
+	var requestChangeProfile request.ChangeProfile
+	c.Bind(&requestChangeProfile)
 
-	if changeProfile.Name == "" {
+	if requestChangeProfile.Name == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Name cannot be empty",
 		})
 	}
-	var profileDatabase profiledatabase.Profile
-	result := configs.DB.Model(&profileDatabase).Where("user_id = ?", userId).Updates(profiledatabase.Profile{Name: changeProfile.Name, Bio: changeProfile.Bio})
-
-	if result.Error != nil {
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.ChangeProfile(userId, requestChangeProfile)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 	return c.JSON(http.StatusCreated, base.BaseResponse{

@@ -1,36 +1,36 @@
 package response
 
 import (
-	articleDatabase "article-api/models/article/database"
+	"article-api/models/article/database"
 	"article-api/models/comment/response"
 	"time"
 )
 
-type ArticleResponse struct {
-	Id        uint                       `json:"id"`
-	Title     string                     `json:"title"`
-	Text      string                     `json:"text"`
-	Like      int                        `json:"like"`
-	Visit     int                        `json:"visit"`
-	UserId    int                        `json:"userId"`
-	CreatedAt time.Time                  `json:"createdAt"`
-	UpdatedAt time.Time                  `json:"updatedAt"`
-	Comments  []response.CommentResponse `json:"comments"`
+type Article struct {
+	Id        uint               `json:"id"`
+	Title     string             `json:"title"`
+	Text      string             `json:"text"`
+	Like      int                `json:"like"`
+	Visit     int                `json:"visit"`
+	UserId    int                `json:"userId"`
+	CreatedAt time.Time          `json:"createdAt"`
+	UpdatedAt time.Time          `json:"updatedAt"`
+	Comments  []response.Comment `json:"comments"`
 }
 
-func (articleResponse *ArticleResponse) MapArticleFromDatabase(articleDatabase articleDatabase.Article) {
-	articleResponse.Id = articleDatabase.ID
-	articleResponse.Title = articleDatabase.Title
-	articleResponse.Text = articleDatabase.Text
-	articleResponse.Like = len(articleDatabase.Likes)
-	articleResponse.Visit = len(articleDatabase.Visits)
-	articleResponse.UserId = articleDatabase.UserId
-	articleResponse.CreatedAt = articleDatabase.CreatedAt
-	articleResponse.UpdatedAt = articleDatabase.UpdatedAt
+func (article *Article) MapArticleFromDatabase(databaseArticle database.Article) {
+	article.Id = databaseArticle.ID
+	article.Title = databaseArticle.Title
+	article.Text = databaseArticle.Text
+	article.Like = len(databaseArticle.Likes)
+	article.Visit = len(databaseArticle.Visits)
+	article.UserId = databaseArticle.UserId
+	article.CreatedAt = databaseArticle.CreatedAt
+	article.UpdatedAt = databaseArticle.UpdatedAt
 
-	var commentResponse response.CommentResponse
-	for _, v := range articleDatabase.Comments {
-		commentResponse.MapCommentFromDatabase(v)
-		articleResponse.Comments = append(articleResponse.Comments, commentResponse)
+	var responseComment response.Comment
+	for _, v := range databaseArticle.Comments {
+		responseComment.MapCommentFromDatabase(v)
+		article.Comments = append(article.Comments, responseComment)
 	}
 }

@@ -3,65 +3,63 @@ package controllers
 import (
 	"article-api/configs"
 	"article-api/middlewares"
-	articledatabase "article-api/models/article/database"
+	"article-api/models/article/database"
 	"article-api/models/article/request"
 	"article-api/models/article/response"
 	"article-api/models/base"
-	visitdatabase "article-api/models/visit/database"
+	"article-api/repository"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 )
 
 func GetArticlesController(c echo.Context) error {
 	search := c.QueryParam("search")
 
-	var articles []articledatabase.Article
-	var result *gorm.DB
-
+	var articles []database.Article
+	var err error
+	repository := repository.NewRepository(configs.DB)
 	if search != "" {
-		result = configs.DB.Preload("Likes").Preload("Comments").Preload("Visits").Where("title LIKE ? OR text LIKE ?", "%"+search+"%", "%"+search+"%").Find(&articles)
+		articles, err = repository.SearchArticles(search)
 	} else {
-		result = configs.DB.Preload("Likes").Preload("Comments").Preload("Visits").Find(&articles)
+		articles, err = repository.GetArticles()
 	}
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: true,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
-	var articleResponse response.ArticleResponse
-	var resultResponse []response.ArticleResponse
+	var responseArticle response.Article
+	var responseArticles []response.Article
 	for _, v := range articles {
-		articleResponse.MapArticleFromDatabase(v)
-		resultResponse = append(resultResponse, articleResponse)
+		responseArticle.MapArticleFromDatabase(v)
+		responseArticles = append(responseArticles, responseArticle)
 	}
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
 		Message: "Success get data articles",
-		Data:    resultResponse,
+		Data:    responseArticles,
 	})
 }
 
 func GetArticleController(c echo.Context) error {
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	visitdatabase := visitdatabase.Visit{ArticleId: articleId}
-	configs.DB.Create(&visitdatabase)
+	repository := repository.NewRepository(configs.DB)
+	repository.PostVisit(articleId)
 
-	var article articledatabase.Article
-	result := configs.DB.Preload("Likes").Preload("Comments").Preload("Visits").Find(&article, "articles.id = ?", articleId)
-	if result.Error != nil {
+	article, err := repository.GetArticle(articleId)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
@@ -72,13 +70,13 @@ func GetArticleController(c echo.Context) error {
 		})
 	}
 
-	var articleResponse response.ArticleResponse
-	articleResponse.MapArticleFromDatabase(article)
+	var responseArticle response.Article
+	responseArticle.MapArticleFromDatabase(article)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
 		Message: "Success get data article",
-		Data:    articleResponse,
+		Data:    responseArticle,
 	})
 }
 
@@ -89,26 +87,26 @@ func AddArticleController(c echo.Context) error {
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 
-	var articleRequest request.Article
-	c.Bind(&articleRequest)
-	article := articledatabase.Article{Title: articleRequest.Title, Text: articleRequest.Text, UserId: userId}
+	var requestArticle request.Article
+	c.Bind(&requestArticle)
 
-	result := configs.DB.Create(&article)
+	repository := repository.NewRepository(configs.DB)
+	article, err := repository.PostArticle(userId, requestArticle)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
-	var articleResponse response.AddArticleResponse
-	articleResponse.MapAddArticleFromDatabase(article)
+	var reponseArticle response.AddArticle
+	reponseArticle.MapAddArticleFromDatabase(article)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
 		Message: "Success created article",
-		Data:    articleResponse,
+		Data:    reponseArticle,
 	})
 }
 
@@ -118,12 +116,12 @@ func UpdateArticleController(c echo.Context) error {
 	claims, _ := middlewares.ExtractClaims(token[1])
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
-	articleId := c.Param("articleId")
+	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	var article articledatabase.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
+	article, err := repository.VerifyArticle(articleId)
 
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
@@ -137,15 +135,15 @@ func UpdateArticleController(c echo.Context) error {
 		})
 	}
 
-	var articleRequest request.Article
-	c.Bind(&articleRequest)
+	var requestArticle request.Article
+	c.Bind(&requestArticle)
 
-	result := configs.DB.Model(&article).Where("id = ? AND user_id = ?", articleId, userId).Updates(articledatabase.Article{Title: articleRequest.Title, Text: articleRequest.Text})
+	article, err = repository.PutArticle(userId, articleId, requestArticle)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
@@ -161,12 +159,12 @@ func DeleteArticleController(c echo.Context) error {
 	claims, _ := middlewares.ExtractClaims(token[1])
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
-	articleId := c.Param("articleId")
+	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	var article articledatabase.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
+	article, err := repository.VerifyArticle(articleId)
 
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
@@ -180,12 +178,12 @@ func DeleteArticleController(c echo.Context) error {
 		})
 	}
 
-	result := configs.DB.Where("id = ? AND user_id = ?", articleId, userId).Delete(&article)
+	err = repository.DeleteArticle(userId, articleId)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 

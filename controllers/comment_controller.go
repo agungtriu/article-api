@@ -3,10 +3,10 @@ package controllers
 import (
 	"article-api/configs"
 	"article-api/middlewares"
-	"article-api/models/article/database"
 	"article-api/models/base"
-	commentdatabase "article-api/models/comment/database"
 	"article-api/models/comment/request"
+	"article-api/models/comment/response"
+	"article-api/repository"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,11 +22,10 @@ func AddCommentController(c echo.Context) error {
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.GetArticle(articleId)
 
-	var article database.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
-
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
@@ -36,21 +35,22 @@ func AddCommentController(c echo.Context) error {
 	var commentRequest request.Comment
 	c.Bind(&commentRequest)
 
-	comment := commentdatabase.Comment{Text: commentRequest.Text, UserId: userId, ArticleId: articleId}
+	comment, err := repository.PostComment(userId, articleId, commentRequest)
 
-	result := configs.DB.Create(&comment)
-
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
+
+	var responseComment response.Comment
+	responseComment.MapCommentFromDatabase(comment)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
 		Message: "Success created comment",
-		Data:    map[string]uint{"id": comment.ID},
+		Data:    responseComment,
 	})
 }
 
@@ -60,26 +60,25 @@ func UpdateCommentController(c echo.Context) error {
 	claims, _ := middlewares.ExtractClaims(token[1])
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
-	articleId := c.Param("articleId")
-	commentId := c.Param("commentId")
+	articleId, _ := strconv.Atoi(c.Param("articleId"))
+	commentId, _ := strconv.Atoi(c.Param("commentId"))
 
 	var commentRequest request.Comment
 	c.Bind(&commentRequest)
 
-	var article database.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.VerifyArticle(articleId)
 
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	var comment commentdatabase.Comment
-	verifyComment := configs.DB.First(&comment, "id = ?", commentId)
+	comment, err := repository.VerifyComment(commentId)
 
-	if verifyComment.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Comment not found",
@@ -93,12 +92,11 @@ func UpdateCommentController(c echo.Context) error {
 		})
 	}
 
-	result := configs.DB.Model(&comment).Where("id = ? AND user_id = ? AND article_id = ?", commentId, userId, articleId).Update("text", commentRequest.Text)
-
-	if result.Error != nil {
+	comment, err = repository.PutComment(commentId, userId, articleId, commentRequest)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
@@ -114,23 +112,22 @@ func DeleteCommentController(c echo.Context) error {
 	claims, _ := middlewares.ExtractClaims(token[1])
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
-	articleId := c.Param("articleId")
-	commentId := c.Param("commentId")
+	articleId, _ := strconv.Atoi(c.Param("articleId"))
+	commentId, _ := strconv.Atoi(c.Param("commentId"))
 
-	var article database.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
 
-	if verifyArticle.Error != nil {
+	_, err := repository.VerifyArticle(articleId)
+
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	var comment commentdatabase.Comment
-	verifyComment := configs.DB.First(&comment, "id = ?", commentId)
-
-	if verifyComment.Error != nil {
+	comment, err := repository.VerifyComment(commentId)
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Comment not found",
@@ -144,12 +141,11 @@ func DeleteCommentController(c echo.Context) error {
 		})
 	}
 
-	result := configs.DB.Where("id = ? AND article_id = ? AND user_id = ?", commentId, articleId, userId).Delete(&comment)
-
-	if result.Error != nil {
+	err = repository.DeleteComment(commentId, userId, articleId)
+	if err != nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 

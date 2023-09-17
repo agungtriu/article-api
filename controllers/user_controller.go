@@ -5,98 +5,107 @@ import (
 	"article-api/helper"
 	"article-api/middlewares"
 	"article-api/models/base"
-	profiledatabase "article-api/models/profile/database"
-	userdatabase "article-api/models/user/database"
-	userRequest "article-api/models/user/request"
+	"article-api/models/user/request"
 	"article-api/models/user/response"
-	"errors"
+	"article-api/repository"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 )
 
 func RegisterController(c echo.Context) error {
-	var userRegister userRequest.UserRegister
+	var requestRegister request.Register
 
-	c.Bind(&userRegister)
+	c.Bind(&requestRegister)
 
-	if userRegister.Username == "" {
+	if requestRegister.Username == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username cannot be empty",
 		})
 	}
 
-	if strings.Contains(userRegister.Username, " ") {
+	if strings.Contains(requestRegister.Username, " ") {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid username format",
 		})
 	}
-	if userRegister.Email == "" {
+	if requestRegister.Email == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Email cannot be empty",
 		})
 	}
-	if !helper.IsEmailValid(userRegister.Email) {
+	if !helper.IsEmailValid(requestRegister.Email) {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid email format",
 		})
 	}
 
-	if userRegister.Password == "" {
+	if requestRegister.Password == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password cannot be empty",
 		})
 	}
 
-	if userRegister.ConfirmPassword == "" {
+	if requestRegister.ConfirmPassword == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Confirm Password cannot be empty",
 		})
 	}
 
-	if userRegister.Password != userRegister.ConfirmPassword {
+	if requestRegister.Password != requestRegister.ConfirmPassword {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password and Confirm Password not match",
 		})
 	}
 
-	var userDatabase userdatabase.User
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.VerifyUsername(requestRegister.Username)
 
-	varifyUserEmail := configs.DB.First(&userDatabase, "username = ? OR email = ?", strings.ToLower(userRegister.Username), strings.ToLower(userRegister.Email))
-
-	if varifyUserEmail.Error == nil {
+	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
-			Error:  "Username or Email already registered",
+			Error:  "Username already registered",
 		})
 	}
 
-	hashedPassword, _ := helper.HashPassword(userRegister.Password)
+	_, err = repository.VerifyEmail(requestRegister.Email)
 
-	user := userdatabase.User{Username: strings.ToLower(userRegister.Username), Email: strings.ToLower(userRegister.Email), Password: hashedPassword}
-	result := configs.DB.Create(&user)
+	if err == nil {
+		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
+			Status: false,
+			Error:  "Email already registered",
+		})
+	}
 
-	if result.Error != nil {
+	user, err := repository.RegisterUser(requestRegister)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 
 	}
 
-	profile := profiledatabase.Profile{Name: "", Bio: "", UserId: int(user.ID)}
-	configs.DB.Create(&profile)
+	_, err = repository.RegisterProfile(int(user.ID))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
+			Status: false,
+			Error:  err.Error(),
+		})
 
-	var registerResponse response.RegisterResponse
+	}
+
+	var registerResponse response.Register
 	registerResponse.MapRegisterFromDatabase(user)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
@@ -108,45 +117,45 @@ func RegisterController(c echo.Context) error {
 }
 
 func LoginController(c echo.Context) error {
-	var userLogin userRequest.UserLogin
+	var requestLogin request.Login
 
-	c.Bind(&userLogin)
+	c.Bind(&requestLogin)
 
-	if userLogin.Username == "" {
+	if requestLogin.Username == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username cannot be empty",
 		})
 	}
 
-	if userLogin.Password == "" {
+	if requestLogin.Password == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password cannot be empty",
 		})
 	}
 
-	var userDatabase userdatabase.User
-	key := strings.ToLower(userLogin.Username)
-	verifyUserEmail := configs.DB.First(&userDatabase, "username = ? OR email = ?", key, key)
+	repository := repository.NewRepository(configs.DB)
+	user, err := repository.VerifyUsername(requestLogin.Username)
 
-	if errors.Is(verifyUserEmail.Error, gorm.ErrRecordNotFound) {
+	if err != nil {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
-			Error:  userLogin.Username + " was not registered",
+			Error:  requestLogin.Username + " was not registered",
 		})
 	}
 
-	err := helper.CheckPasswordHash(userLogin.Password, userDatabase.Password)
+	isErr := helper.CheckPasswordHash(requestLogin.Password, user.Password)
 
-	if err {
+	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid password",
 		})
 	}
-	var loginResponse response.LoginResponse
-	loginResponse.MapLoginFromDatabase(userDatabase)
+
+	var loginResponse response.Login
+	loginResponse.MapLoginFromDatabase(user)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
@@ -157,19 +166,19 @@ func LoginController(c echo.Context) error {
 }
 
 func GetUserController(c echo.Context) error {
-	userId := c.Param("userId")
+	userId, _ := strconv.Atoi(c.Param("userId"))
 
-	var user userdatabase.User
-	err := configs.DB.Model(&userdatabase.User{}).Preload("Profile").First(&user, "id = ?", userId).Error
+	repository := repository.NewRepository(configs.DB)
+	user, err := repository.GetUser(userId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
-			Error:  "user was not found",
+			Error:  err.Error(),
 		})
 	}
 
-	var userResponse response.UserResponse
+	var userResponse response.User
 	userResponse.MapUserFromDatabase(user)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
@@ -183,56 +192,56 @@ func ChangeUsernameController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
-	userId := claims["userId"]
+	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 
-	var userChangeUsername userRequest.UserChangeUsername
-	c.Bind(&userChangeUsername)
+	var requestChangeUsername request.ChangeUsername
+	c.Bind(&requestChangeUsername)
 
-	if userChangeUsername.Username == "" {
+	if requestChangeUsername.Username == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username cannot be empty",
 		})
 	}
 
-	if strings.Contains(userChangeUsername.Username, " ") {
+	if strings.Contains(requestChangeUsername.Username, " ") {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username cannot contain space",
 		})
 	}
 
-	if userChangeUsername.Password == "" {
+	if requestChangeUsername.Password == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password cannot be empty",
 		})
 	}
 
-	var userDatabase userdatabase.User
-	configs.DB.First(&userDatabase, "id = ?", userId)
+	repository := repository.NewRepository(configs.DB)
+	user, _ := repository.GetUser(userId)
 
-	err := helper.CheckPasswordHash(userChangeUsername.Password, userDatabase.Password)
+	isErr := helper.CheckPasswordHash(requestChangeUsername.Password, user.Password)
 
-	if err {
+	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid password",
 		})
 	}
 
-	varifyUsername := configs.DB.First(&userDatabase, "username = ?", strings.ToLower(userChangeUsername.Username))
+	_, err := repository.VerifyUsername(requestChangeUsername.Username)
 
-	if varifyUsername.Error == nil {
+	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username already registered",
 		})
 	}
 
-	result := configs.DB.Model(&userDatabase).Where("id = ?", userId).Update("username", strings.ToLower(userChangeUsername.Username))
+	_, err = repository.ChangeUsername(userId, requestChangeUsername.Username)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change username",
@@ -249,58 +258,67 @@ func ChangePasswordController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
-	userId := claims["userId"]
+	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 
-	var userChangePassword userRequest.UserChangePassword
-	c.Bind(&userChangePassword)
+	var requestChangePassword request.ChangePassword
+	c.Bind(&requestChangePassword)
 
-	if userChangePassword.OldPassword == "" {
+	if requestChangePassword.OldPassword == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Old Password cannot be empty",
 		})
 	}
 
-	if userChangePassword.NewPassword == "" {
+	if requestChangePassword.NewPassword == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "New Password cannot be empty",
 		})
 	}
 
-	if userChangePassword.ConfirmPassword == "" {
+	if requestChangePassword.ConfirmPassword == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Confirm Password cannot be empty",
 		})
 	}
 
-	if userChangePassword.NewPassword != userChangePassword.ConfirmPassword {
+	if requestChangePassword.NewPassword != requestChangePassword.ConfirmPassword {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password and Confirm Password not match",
 		})
 	}
-	var userDatabase userdatabase.User
-	configs.DB.First(&userDatabase, "id = ?", userId)
 
-	err := helper.CheckPasswordHash(userChangePassword.OldPassword, userDatabase.Password)
+	repository := repository.NewRepository(configs.DB)
+	user, err := repository.GetUser(userId)
 
-	if err {
+	if err != nil {
+		return c.JSON(http.StatusNotFound, base.ErrorResponse{
+			Status: false,
+			Error:  "User not found",
+		})
+	}
+
+	isErr := helper.CheckPasswordHash(requestChangePassword.OldPassword, user.Password)
+
+	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid password",
 		})
 	}
-	hashedPassword, _ := helper.HashPassword(userChangePassword.NewPassword)
-	result := configs.DB.Model(&userDatabase).Where("id = ?", userId).Update("password", hashedPassword)
 
-	if result.Error != nil {
+	user, err = repository.ChangePassword(userId, requestChangePassword)
+
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change password",
 		})
 	}
+
 	return c.JSON(http.StatusCreated, base.BaseResponse{
 		Status:  true,
 		Message: "Success change password",
@@ -312,56 +330,56 @@ func ChangeEmailController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
-	userId := claims["userId"]
+	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 
-	var userChangeEmail userRequest.UserChangeEmail
-	c.Bind(&userChangeEmail)
+	var requestChangeEmail request.ChangeEmail
+	c.Bind(&requestChangeEmail)
 
-	if userChangeEmail.Email == "" {
+	if requestChangeEmail.Email == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Email cannot be empty",
 		})
 	}
 
-	if !helper.IsEmailValid(userChangeEmail.Email) {
+	if !helper.IsEmailValid(requestChangeEmail.Email) {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid email format",
 		})
 	}
 
-	if userChangeEmail.Password == "" {
+	if requestChangeEmail.Password == "" {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Password cannot be empty",
 		})
 	}
 
-	var userDatabase userdatabase.User
-	configs.DB.First(&userDatabase, "id = ?", userId)
+	repository := repository.NewRepository(configs.DB)
+	user, _ := repository.GetUser(userId)
 
-	err := helper.CheckPasswordHash(userChangeEmail.Password, userDatabase.Password)
+	isErr := helper.CheckPasswordHash(requestChangeEmail.Password, user.Password)
 
-	if err {
+	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
 			Error:  "Invalid password",
 		})
 	}
 
-	varifyEmail := configs.DB.First(&userDatabase, "email = ?", strings.ToLower(userChangeEmail.Email))
+	_, err := repository.VerifyEmail(requestChangeEmail.Email)
 
-	if varifyEmail.Error == nil {
+	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Email already registered",
 		})
 	}
 
-	result := configs.DB.Model(&userDatabase).Where("id = ?", userId).Update("email", strings.ToLower(userChangeEmail.Email))
+	user, err = repository.ChangeEmail(userId, requestChangeEmail)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change email",
