@@ -59,6 +59,13 @@ func GetArticleController(c echo.Context) error {
 	var article articledatabase.Article
 	result := configs.DB.Preload("Likes").Preload("Comments").Preload("Visits").Find(&article, "articles.id = ?", articleId)
 	if result.Error != nil {
+		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
+			Status: false,
+			Error:  result.Error,
+		})
+	}
+
+	if article.ID == 0 {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
