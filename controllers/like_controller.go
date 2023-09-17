@@ -3,9 +3,8 @@ package controllers
 import (
 	"article-api/configs"
 	"article-api/middlewares"
-	articledatabase "article-api/models/article/database"
 	"article-api/models/base"
-	likedatabase "article-api/models/like/database"
+	"article-api/repository"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -22,33 +21,31 @@ func AddLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	var article articledatabase.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.VerifyArticle(articleId)
 
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	var likeDatabase likedatabase.Like
-	configs.DB.Find(&likeDatabase, "article_id = ? AND user_id = ?", articleId, userId)
+	like, _ := repository.VerifyLike(articleId, userId)
 
-	if likeDatabase.ID != 0 {
+	if like.ID != 0 {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Cannot double like article",
 		})
 	}
 
-	like := likedatabase.Like{UserId: userId, ArticleId: articleId}
-	result := configs.DB.Create(&like)
+	like, err = repository.PostLike(userId, articleId)
 
-	if result.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 
@@ -66,33 +63,30 @@ func DeleteLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	var article articledatabase.Article
-	verifyArticle := configs.DB.First(&article, "id = ?", articleId)
+	repository := repository.NewRepository(configs.DB)
+	_, err := repository.VerifyArticle(articleId)
 
-	if verifyArticle.Error != nil {
+	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	var likeDatabase likedatabase.Like
-	configs.DB.Find(&likeDatabase, "article_id = ? AND user_id = ?", articleId, userId)
+	like, _ := repository.VerifyLike(articleId, userId)
 
-	if likeDatabase.ID == 0 {
+	if like.ID == 0 {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Like not found",
 		})
 	}
 
-	var like likedatabase.Like
-	result := configs.DB.Where("user_id = ? AND article_id = ?", userId, articleId).Delete(&like)
-
-	if result.Error != nil {
+	err = repository.DeleteLike(userId, articleId)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  result.Error,
+			Error:  err.Error(),
 		})
 	}
 

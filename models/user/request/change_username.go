@@ -1,6 +1,6 @@
 package request
 
-type UserChangeUsername struct {
+type ChangeUsername struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }

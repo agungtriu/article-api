@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type CommentResponse struct {
+type Comment struct {
 	Id        uint      `json:"id"`
 	Text      string    `json:"text"`
 	UserId    int       `json:"userId"`
@@ -13,10 +13,10 @@ type CommentResponse struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func (commentResponse *CommentResponse) MapCommentFromDatabase(commentDatabase database.Comment) {
-	commentResponse.Id = commentDatabase.ID
-	commentResponse.Text = commentDatabase.Text
-	commentResponse.UserId = commentDatabase.UserId
-	commentResponse.CreatedAt = commentDatabase.CreatedAt
-	commentResponse.UpdatedAt = commentDatabase.UpdatedAt
+func (comment *Comment) MapCommentFromDatabase(databaseComment database.Comment) {
+	comment.Id = databaseComment.ID
+	comment.Text = databaseComment.Text
+	comment.UserId = databaseComment.UserId
+	comment.CreatedAt = databaseComment.CreatedAt
+	comment.UpdatedAt = databaseComment.UpdatedAt
 }

@@ -1,6 +1,6 @@
 package request
 
-type UserChangeProfile struct {
+type ChangeProfile struct {
 	Name string `json:"name"`
 	Bio  string `json:"bio"`
 }
