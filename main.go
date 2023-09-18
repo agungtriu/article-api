@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	// helper.LoadEnv()
+	helper.LoadEnv()
 	configs.InitDatabase()
 	e := echo.New()
 	e.Use(middleware.Logger())

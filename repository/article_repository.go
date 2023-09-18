@@ -2,15 +2,14 @@ package repository
 
 import (
 	"article-api/models/article/database"
-	"article-api/models/article/request"
 )
 
 type ArticleRepository interface {
 	GetArticles() ([]database.Article, error)
 	SearchArticles(search string) ([]database.Article, error)
 	GetArticle(articleId int) (database.Article, error)
-	PostArticle(userId int, requestArticle request.Article) (database.Article, error)
-	PutArticle(userId int, articleId int, requestArticle request.Article) (database.Article, error)
+	PostArticle(userId int, article database.Article) (database.Article, error)
+	PutArticle(userId int, articleId int, article database.Article) (database.Article, error)
 	DeleteArticle(userId int, articleId int) error
 	VerifyArticle(articleId int) (database.Article, error)
 }
@@ -35,15 +34,13 @@ func (r *repository) GetArticle(articleId int) (database.Article, error) {
 
 	return article, err
 }
-func (r *repository) PostArticle(userId int, requestArticle request.Article) (database.Article, error) {
-	article := database.Article{Title: requestArticle.Title, Text: requestArticle.Text, UserId: userId}
+func (r *repository) PostArticle(userId int, article database.Article) (database.Article, error) {
 	err := r.db.Create(&article).Error
 
 	return article, err
 }
-func (r *repository) PutArticle(userId int, articleId int, requestArticle request.Article) (database.Article, error) {
-	var article database.Article
-	err := r.db.Model(&article).Where("id = ? AND user_id = ?", articleId, userId).Updates(database.Article{Title: requestArticle.Title, Text: requestArticle.Text}).Error
+func (r *repository) PutArticle(userId int, articleId int, article database.Article) (database.Article, error) {
+	err := r.db.Model(&article).Where("id = ? AND user_id = ?", articleId, userId).Updates(article).Error
 
 	return article, err
 }

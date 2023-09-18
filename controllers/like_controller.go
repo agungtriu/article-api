@@ -1,10 +1,9 @@
 package controllers
 
 import (
-	"article-api/configs"
 	"article-api/middlewares"
 	"article-api/models/base"
-	"article-api/repository"
+	"article-api/service"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,7 +12,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func AddLikeController(c echo.Context) error {
+type likeController struct {
+	likeService    service.LikeService
+	articleService service.ArticleService
+}
+
+func NewLikeController(likeService service.LikeService, articleService service.ArticleService) *likeController {
+	return &likeController{likeService, articleService}
+}
+
+func (controller *likeController) AddLikeController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -21,8 +29,7 @@ func AddLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.VerifyArticle(articleId)
+	_, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -31,7 +38,7 @@ func AddLikeController(c echo.Context) error {
 		})
 	}
 
-	like, _ := repository.VerifyLike(articleId, userId)
+	like, _ := controller.likeService.VerifyLike(articleId, userId)
 
 	if like.ID != 0 {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
@@ -40,7 +47,7 @@ func AddLikeController(c echo.Context) error {
 		})
 	}
 
-	like, err = repository.PostLike(userId, articleId)
+	like, err = controller.likeService.PostLike(userId, articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -55,7 +62,7 @@ func AddLikeController(c echo.Context) error {
 	})
 }
 
-func DeleteLikeController(c echo.Context) error {
+func (controller *likeController) DeleteLikeController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -63,8 +70,7 @@ func DeleteLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.VerifyArticle(articleId)
+	_, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -73,7 +79,7 @@ func DeleteLikeController(c echo.Context) error {
 		})
 	}
 
-	like, _ := repository.VerifyLike(articleId, userId)
+	like, _ := controller.likeService.VerifyLike(articleId, userId)
 
 	if like.ID == 0 {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -82,7 +88,7 @@ func DeleteLikeController(c echo.Context) error {
 		})
 	}
 
-	err = repository.DeleteLike(userId, articleId)
+	err = controller.likeService.DeleteLike(userId, articleId)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,

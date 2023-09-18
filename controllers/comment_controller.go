@@ -1,12 +1,11 @@
 package controllers
 
 import (
-	"article-api/configs"
 	"article-api/middlewares"
 	"article-api/models/base"
 	"article-api/models/comment/request"
 	"article-api/models/comment/response"
-	"article-api/repository"
+	"article-api/service"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,15 +14,22 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func AddCommentController(c echo.Context) error {
+type commentController struct {
+	commentService service.CommentService
+	articleService service.ArticleService
+}
+
+func NewCommentController(commentService service.CommentService, articleService service.ArticleService) *commentController {
+	return &commentController{commentService, articleService}
+}
+func (controller *commentController) AddCommentController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.GetArticle(articleId)
+	_, err := controller.articleService.GetArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -35,7 +41,7 @@ func AddCommentController(c echo.Context) error {
 	var commentRequest request.Comment
 	c.Bind(&commentRequest)
 
-	comment, err := repository.PostComment(userId, articleId, commentRequest)
+	comment, err := controller.commentService.PostComment(userId, articleId, commentRequest)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -54,7 +60,7 @@ func AddCommentController(c echo.Context) error {
 	})
 }
 
-func UpdateCommentController(c echo.Context) error {
+func (controller *commentController) UpdateCommentController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -66,8 +72,7 @@ func UpdateCommentController(c echo.Context) error {
 	var requestComment request.Comment
 	c.Bind(&requestComment)
 
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.VerifyArticle(articleId)
+	_, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -76,7 +81,7 @@ func UpdateCommentController(c echo.Context) error {
 		})
 	}
 
-	comment, err := repository.VerifyComment(commentId)
+	comment, err := controller.commentService.VerifyComment(commentId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -92,7 +97,7 @@ func UpdateCommentController(c echo.Context) error {
 		})
 	}
 
-	comment, err = repository.PutComment(commentId, userId, articleId, requestComment)
+	comment, err = controller.commentService.PutComment(commentId, userId, articleId, requestComment.Text)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
@@ -106,7 +111,7 @@ func UpdateCommentController(c echo.Context) error {
 	})
 }
 
-func DeleteCommentController(c echo.Context) error {
+func (controller *commentController) DeleteCommentController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -115,9 +120,7 @@ func DeleteCommentController(c echo.Context) error {
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 	commentId, _ := strconv.Atoi(c.Param("commentId"))
 
-	repository := repository.NewRepository(configs.DB)
-
-	_, err := repository.VerifyArticle(articleId)
+	_, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -126,7 +129,7 @@ func DeleteCommentController(c echo.Context) error {
 		})
 	}
 
-	comment, err := repository.VerifyComment(commentId)
+	comment, err := controller.commentService.VerifyComment(commentId)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
@@ -141,7 +144,7 @@ func DeleteCommentController(c echo.Context) error {
 		})
 	}
 
-	err = repository.DeleteComment(commentId, userId, articleId)
+	err = controller.commentService.DeleteComment(commentId, userId, articleId)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,

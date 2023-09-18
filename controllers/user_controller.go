@@ -1,13 +1,12 @@
 package controllers
 
 import (
-	"article-api/configs"
 	"article-api/helper"
 	"article-api/middlewares"
 	"article-api/models/base"
 	"article-api/models/user/request"
 	"article-api/models/user/response"
-	"article-api/repository"
+	"article-api/service"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,7 +15,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func RegisterController(c echo.Context) error {
+type userController struct {
+	userService    service.UserService
+	profileService service.ProfileService
+}
+
+func NewUserController(userService service.UserService, profileService service.ProfileService) *userController {
+	return &userController{userService, profileService}
+}
+
+func (controller *userController) RegisterController(c echo.Context) error {
 	var requestRegister request.Register
 
 	c.Bind(&requestRegister)
@@ -68,8 +76,7 @@ func RegisterController(c echo.Context) error {
 		})
 	}
 
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.VerifyUsername(requestRegister.Username)
+	_, err := controller.userService.VerifyUsername(requestRegister.Username)
 
 	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
@@ -78,7 +85,7 @@ func RegisterController(c echo.Context) error {
 		})
 	}
 
-	_, err = repository.VerifyEmail(requestRegister.Email)
+	_, err = controller.userService.VerifyEmail(requestRegister.Email)
 
 	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
@@ -87,7 +94,7 @@ func RegisterController(c echo.Context) error {
 		})
 	}
 
-	user, err := repository.RegisterUser(requestRegister)
+	user, err := controller.userService.RegisterUser(requestRegister)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
@@ -95,8 +102,7 @@ func RegisterController(c echo.Context) error {
 		})
 
 	}
-
-	_, err = repository.RegisterProfile(int(user.ID))
+	_, err = controller.profileService.RegisterProfile(int(user.ID))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
@@ -116,7 +122,7 @@ func RegisterController(c echo.Context) error {
 
 }
 
-func LoginController(c echo.Context) error {
+func (controller *userController) LoginController(c echo.Context) error {
 	var requestLogin request.Login
 
 	c.Bind(&requestLogin)
@@ -135,8 +141,7 @@ func LoginController(c echo.Context) error {
 		})
 	}
 
-	repository := repository.NewRepository(configs.DB)
-	user, err := repository.VerifyUsername(requestLogin.Username)
+	user, err := controller.userService.VerifyUsername(requestLogin.Username)
 
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
@@ -165,16 +170,15 @@ func LoginController(c echo.Context) error {
 
 }
 
-func GetUserController(c echo.Context) error {
+func (controller *userController) GetUserController(c echo.Context) error {
 	userId, _ := strconv.Atoi(c.Param("userId"))
 
-	repository := repository.NewRepository(configs.DB)
-	user, err := repository.GetUser(userId)
+	user, err := controller.userService.GetUser(userId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  "User not found",
 		})
 	}
 
@@ -188,7 +192,7 @@ func GetUserController(c echo.Context) error {
 	})
 }
 
-func ChangeUsernameController(c echo.Context) error {
+func (controller *userController) ChangeUsernameController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -218,8 +222,7 @@ func ChangeUsernameController(c echo.Context) error {
 		})
 	}
 
-	repository := repository.NewRepository(configs.DB)
-	user, _ := repository.GetUser(userId)
+	user, _ := controller.userService.GetUser(userId)
 
 	isErr := helper.CheckPasswordHash(requestChangeUsername.Password, user.Password)
 
@@ -230,7 +233,7 @@ func ChangeUsernameController(c echo.Context) error {
 		})
 	}
 
-	_, err := repository.VerifyUsername(requestChangeUsername.Username)
+	_, err := controller.userService.VerifyUsername(requestChangeUsername.Username)
 
 	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
@@ -239,7 +242,7 @@ func ChangeUsernameController(c echo.Context) error {
 		})
 	}
 
-	_, err = repository.ChangeUsername(userId, requestChangeUsername.Username)
+	_, err = controller.userService.ChangeUsername(userId, requestChangeUsername.Username)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -254,7 +257,7 @@ func ChangeUsernameController(c echo.Context) error {
 
 }
 
-func ChangePasswordController(c echo.Context) error {
+func (controller *userController) ChangePasswordController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -291,8 +294,7 @@ func ChangePasswordController(c echo.Context) error {
 		})
 	}
 
-	repository := repository.NewRepository(configs.DB)
-	user, err := repository.GetUser(userId)
+	user, err := controller.userService.GetUser(userId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -310,7 +312,7 @@ func ChangePasswordController(c echo.Context) error {
 		})
 	}
 
-	user, err = repository.ChangePassword(userId, requestChangePassword)
+	user, err = controller.userService.ChangePassword(userId, requestChangePassword.NewPassword)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -326,7 +328,7 @@ func ChangePasswordController(c echo.Context) error {
 
 }
 
-func ChangeEmailController(c echo.Context) error {
+func (controller *userController) ChangeEmailController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -356,8 +358,7 @@ func ChangeEmailController(c echo.Context) error {
 		})
 	}
 
-	repository := repository.NewRepository(configs.DB)
-	user, _ := repository.GetUser(userId)
+	user, _ := controller.userService.GetUser(userId)
 
 	isErr := helper.CheckPasswordHash(requestChangeEmail.Password, user.Password)
 
@@ -368,7 +369,7 @@ func ChangeEmailController(c echo.Context) error {
 		})
 	}
 
-	_, err := repository.VerifyEmail(requestChangeEmail.Email)
+	_, err := controller.userService.VerifyEmail(requestChangeEmail.Email)
 
 	if err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
@@ -377,7 +378,7 @@ func ChangeEmailController(c echo.Context) error {
 		})
 	}
 
-	user, err = repository.ChangeEmail(userId, requestChangeEmail)
+	user, err = controller.userService.ChangeEmail(userId, requestChangeEmail.Email)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
