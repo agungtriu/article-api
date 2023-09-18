@@ -1,13 +1,12 @@
 package controllers
 
 import (
-	"article-api/configs"
 	"article-api/middlewares"
 	"article-api/models/article/database"
 	"article-api/models/article/request"
 	"article-api/models/article/response"
 	"article-api/models/base"
-	"article-api/repository"
+	"article-api/service"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,16 +15,24 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func GetArticlesController(c echo.Context) error {
+type articleController struct {
+	articleService service.ArticleService
+	visitService   service.VisitService
+}
+
+func NewArticleController(articleService service.ArticleService, visitService service.VisitService) *articleController {
+	return &articleController{articleService, visitService}
+}
+
+func (controller *articleController) GetArticlesController(c echo.Context) error {
 	search := c.QueryParam("search")
 
 	var articles []database.Article
 	var err error
-	repository := repository.NewRepository(configs.DB)
 	if search != "" {
-		articles, err = repository.SearchArticles(search)
+		articles, err = controller.articleService.SearchArticles(search)
 	} else {
-		articles, err = repository.GetArticles()
+		articles, err = controller.articleService.GetArticles()
 	}
 
 	if err != nil {
@@ -49,13 +56,12 @@ func GetArticlesController(c echo.Context) error {
 	})
 }
 
-func GetArticleController(c echo.Context) error {
+func (controller *articleController) GetArticleController(c echo.Context) error {
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	repository := repository.NewRepository(configs.DB)
-	repository.PostVisit(articleId)
+	controller.visitService.PostVisit(articleId)
 
-	article, err := repository.GetArticle(articleId)
+	article, err := controller.articleService.GetArticle(articleId)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
@@ -80,7 +86,7 @@ func GetArticleController(c echo.Context) error {
 	})
 }
 
-func AddArticleController(c echo.Context) error {
+func (controller *articleController) AddArticleController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -90,8 +96,7 @@ func AddArticleController(c echo.Context) error {
 	var requestArticle request.Article
 	c.Bind(&requestArticle)
 
-	repository := repository.NewRepository(configs.DB)
-	article, err := repository.PostArticle(userId, requestArticle)
+	article, err := controller.articleService.PostArticle(userId, requestArticle)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -110,7 +115,7 @@ func AddArticleController(c echo.Context) error {
 	})
 }
 
-func UpdateArticleController(c echo.Context) error {
+func (controller *articleController) UpdateArticleController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -118,8 +123,7 @@ func UpdateArticleController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	repository := repository.NewRepository(configs.DB)
-	article, err := repository.VerifyArticle(articleId)
+	article, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -138,7 +142,7 @@ func UpdateArticleController(c echo.Context) error {
 	var requestArticle request.Article
 	c.Bind(&requestArticle)
 
-	article, err = repository.PutArticle(userId, articleId, requestArticle)
+	article, err = controller.articleService.PutArticle(userId, articleId, requestArticle)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
@@ -153,7 +157,7 @@ func UpdateArticleController(c echo.Context) error {
 	})
 }
 
-func DeleteArticleController(c echo.Context) error {
+func (controller *articleController) DeleteArticleController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -161,8 +165,7 @@ func DeleteArticleController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	repository := repository.NewRepository(configs.DB)
-	article, err := repository.VerifyArticle(articleId)
+	article, err := controller.articleService.VerifyArticle(articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
@@ -178,7 +181,7 @@ func DeleteArticleController(c echo.Context) error {
 		})
 	}
 
-	err = repository.DeleteArticle(userId, articleId)
+	err = controller.articleService.DeleteArticle(userId, articleId)
 
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{

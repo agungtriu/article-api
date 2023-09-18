@@ -1,7 +1,10 @@
 package routes
 
 import (
+	"article-api/configs"
 	"article-api/controllers"
+	"article-api/repository"
+	"article-api/service"
 	"os"
 
 	echojwt "github.com/labstack/echo-jwt/v4"
@@ -9,17 +12,22 @@ import (
 )
 
 func ArticleRoute(e *echo.Echo) {
+	repository := repository.NewRepository(configs.DB)
+	articleService := service.NewArticleService(repository)
+	visitService := service.NewVisitService(repository)
+	articleController := controllers.NewArticleController(articleService, visitService)
+
 	eArticles := e.Group("/articles")
-	eArticles.GET("", controllers.GetArticlesController)
-	eArticles.GET("/:articleId", controllers.GetArticleController)
+	eArticles.GET("", articleController.GetArticlesController)
+	eArticles.GET("/:articleId", articleController.GetArticleController)
 
 	eAuth := eArticles.Group("")
 	eAuth.Use(echojwt.JWT([]byte(os.Getenv("PRIVATE_KEY_JWT"))))
-	eAuth.POST("", controllers.AddArticleController)
+	eAuth.POST("", articleController.AddArticleController)
 
 	eAuthArticle := eAuth.Group("/:articleId")
-	eAuthArticle.PUT("", controllers.UpdateArticleController)
-	eAuthArticle.DELETE("", controllers.DeleteArticleController)
+	eAuthArticle.PUT("", articleController.UpdateArticleController)
+	eAuthArticle.DELETE("", articleController.DeleteArticleController)
 
 	LikeRoute(eAuthArticle)
 	CommentRoute(eAuthArticle)

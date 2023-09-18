@@ -1,11 +1,10 @@
 package controllers
 
 import (
-	"article-api/configs"
 	"article-api/middlewares"
 	"article-api/models/base"
 	"article-api/models/profile/request"
-	"article-api/repository"
+	"article-api/service"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -14,7 +13,15 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func ChangeProfileController(c echo.Context) error {
+type profileController struct {
+	profileService service.ProfileService
+}
+
+func NewProfileController(profileService service.ProfileService) *profileController {
+	return &profileController{profileService}
+}
+
+func (controller *profileController) ChangeProfileController(c echo.Context) error {
 	fullToken := c.Request().Header.Get("Authorization")
 	token := strings.Split(fullToken, " ")
 	claims, _ := middlewares.ExtractClaims(token[1])
@@ -29,8 +36,8 @@ func ChangeProfileController(c echo.Context) error {
 			Error:  "Name cannot be empty",
 		})
 	}
-	repository := repository.NewRepository(configs.DB)
-	_, err := repository.ChangeProfile(userId, requestChangeProfile)
+
+	_, err := controller.profileService.ChangeProfile(userId, requestChangeProfile)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
