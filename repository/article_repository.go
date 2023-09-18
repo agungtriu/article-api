@@ -17,14 +17,14 @@ type ArticleRepository interface {
 
 func (r *repository) GetArticles() ([]database.Article, error) {
 	var articles []database.Article
-	err := r.db.Preload("Likes").Preload("Comments").Preload("Visits").Find(&articles).Error
+	err := r.db.Preload("Likes").Find(&articles).Error
 
 	return articles, err
 }
 
 func (r *repository) SearchArticles(search string) ([]database.Article, error) {
 	var articles []database.Article
-	err := r.db.Preload("Likes").Preload("Comments").Preload("Visits").Where("title LIKE ? OR text LIKE ?", "%"+search+"%", "%"+search+"%").Find(&articles).Error
+	err := r.db.Preload("Likes").Where("title LIKE ? OR text LIKE ?", "%"+search+"%", "%"+search+"%").Find(&articles).Error
 
 	return articles, err
 }
