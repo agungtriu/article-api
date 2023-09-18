@@ -70,8 +70,8 @@ func GetArticleController(c echo.Context) error {
 		})
 	}
 
-	var responseArticle response.Article
-	responseArticle.MapArticleFromDatabase(article)
+	var responseArticle response.ArticleDetail
+	responseArticle.MapArticleDetailFromDatabase(article)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
