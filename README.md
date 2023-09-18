@@ -1,5 +1,5 @@
 # Article API
-Article API, a platform where users can not only read captivating articles but also create their own content. This innovative Article API fosters interactive engagement by allowing users to comment, like, and share articles, while also providing insightful traffic analytics.
+Article API is a service where users can read captivating articles and create their own articles. This innovative Article API fosters interactive engagement by allowing users to comment, like, and share articles, while also providing insightful traffic analytics.
 
 
 ### ERD
@@ -8,4 +8,8 @@ Article API, a platform where users can not only read captivating articles but a
 
 ### API Documentation
 https://app.swaggerhub.com/apis-docs/agungtriu/article-api/1.0.0
+
+![Screenshot 2023-09-18 145328](https://github.com/agungtriu/article-api/assets/28708755/03bfcfed-56d8-44b0-a560-cbcad124fe91)
+
+
 
