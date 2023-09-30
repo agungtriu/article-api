@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"article-api/middlewares"
-	"article-api/models/article/database"
 	"article-api/models/article/request"
 	"article-api/models/article/response"
 	"article-api/models/base"
@@ -27,24 +26,26 @@ func NewArticleController(articleService service.ArticleService, visitService se
 func (controller *articleController) GetArticlesController(c echo.Context) error {
 	search := c.QueryParam("search")
 
-	var articles []database.Article
-	var err error
+	channel := make(chan response.Results)
+
 	if search != "" {
-		articles, err = controller.articleService.SearchArticles(search)
+		go controller.articleService.SearchArticles(search, channel)
 	} else {
-		articles, err = controller.articleService.GetArticles()
+		go controller.articleService.GetArticles(channel)
 	}
 
-	if err != nil {
+	articles := <-channel
+
+	if articles.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: true,
-			Error:  err.Error(),
+			Error:  articles.Err.Error(),
 		})
 	}
 
 	var responseArticle response.Article
 	var responseArticles []response.Article
-	for _, v := range articles {
+	for _, v := range articles.Articles {
 		responseArticle.MapArticleFromDatabase(v)
 		responseArticles = append(responseArticles, responseArticle)
 	}
@@ -59,17 +60,21 @@ func (controller *articleController) GetArticlesController(c echo.Context) error
 func (controller *articleController) GetArticleController(c echo.Context) error {
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	controller.visitService.PostVisit(articleId)
+	go controller.visitService.PostVisit(articleId)
 
-	article, err := controller.articleService.GetArticle(articleId)
-	if err != nil {
+	channel := make(chan response.Result)
+	go controller.articleService.GetArticle(articleId, channel)
+
+	article := <-channel
+
+	if article.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  article.Err.Error(),
 		})
 	}
 
-	if article.ID == 0 {
+	if article.Article.ID == 0 {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
@@ -77,7 +82,7 @@ func (controller *articleController) GetArticleController(c echo.Context) error 
 	}
 
 	var responseArticle response.ArticleDetail
-	responseArticle.MapArticleDetailFromDatabase(article)
+	responseArticle.MapArticleDetailFromDatabase(article.Article)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
@@ -96,17 +101,21 @@ func (controller *articleController) AddArticleController(c echo.Context) error 
 	var requestArticle request.Article
 	c.Bind(&requestArticle)
 
-	article, err := controller.articleService.PostArticle(userId, requestArticle)
+	channel := make(chan response.Result)
 
-	if err != nil {
+	go controller.articleService.PostArticle(userId, requestArticle, channel)
+
+	article := <-channel
+
+	if article.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  article.Err.Error(),
 		})
 	}
 
 	var reponseArticle response.AddArticle
-	reponseArticle.MapAddArticleFromDatabase(article)
+	reponseArticle.MapAddArticleFromDatabase(article.Article)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
@@ -122,17 +131,18 @@ func (controller *articleController) UpdateArticleController(c echo.Context) err
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
+	channel := make(chan response.Result)
+	go controller.articleService.VerifyArticle(articleId, channel)
 
-	article, err := controller.articleService.VerifyArticle(articleId)
-
-	if err != nil {
+	article := <-channel
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	if userId != article.UserId {
+	if userId != article.Article.UserId {
 		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
@@ -142,12 +152,14 @@ func (controller *articleController) UpdateArticleController(c echo.Context) err
 	var requestArticle request.Article
 	c.Bind(&requestArticle)
 
-	article, err = controller.articleService.PutArticle(userId, articleId, requestArticle)
+	go controller.articleService.PutArticle(userId, articleId, requestArticle, channel)
 
-	if err != nil {
+	article = <-channel
+
+	if article.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  article.Err.Error(),
 		})
 	}
 
@@ -165,28 +177,32 @@ func (controller *articleController) DeleteArticleController(c echo.Context) err
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	article, err := controller.articleService.VerifyArticle(articleId)
+	channel := make(chan response.Result)
 
-	if err != nil {
+	go controller.articleService.VerifyArticle(articleId, channel)
+
+	article := <-channel
+
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	if userId != article.UserId {
+	if userId != article.Article.UserId {
 		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})
 	}
 
-	err = controller.articleService.DeleteArticle(userId, articleId)
-
-	if err != nil {
+	go controller.articleService.DeleteArticle(userId, articleId, channel)
+	article = <-channel
+	if article.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  article.Err.Error(),
 		})
 	}
 

@@ -3,14 +3,15 @@ package service
 import (
 	"article-api/models/comment/database"
 	"article-api/models/comment/request"
+	"article-api/models/comment/response"
 	"article-api/repository"
 )
 
 type CommentService interface {
-	PostComment(userId int, articleId int, requestComment request.Comment) (database.Comment, error)
-	PutComment(commentId int, userId int, articleId int, text string) (database.Comment, error)
-	DeleteComment(commentId int, userId int, articleId int) error
-	VerifyComment(commentId int) (database.Comment, error)
+	PostComment(userId int, articleId int, requestComment request.Comment, channel chan response.Result)
+	PutComment(commentId int, userId int, articleId int, text string, channel chan response.Result)
+	DeleteComment(commentId int, userId int, articleId int, channel chan response.Result)
+	VerifyComment(commentId int, channel chan response.Result)
 }
 
 type commentService struct {
@@ -21,23 +22,34 @@ func NewCommentService(repository repository.CommentRepository) *commentService 
 	return &commentService{repository}
 }
 
-func (s *commentService) PostComment(userId int, articleId int, requestComment request.Comment) (database.Comment, error) {
+func (s *commentService) PostComment(userId int, articleId int, requestComment request.Comment, channel chan response.Result) {
 	comment := database.Comment{Text: requestComment.Text, UserId: userId, ArticleId: articleId}
 	comment, err := s.repository.PostComment(comment)
-	return comment, err
+	res := new(response.Result)
+	res.Comment = comment
+	res.Err = err
+	channel <- *res
 }
 
-func (s *commentService) PutComment(commentId int, userId int, articleId int, text string) (database.Comment, error) {
+func (s *commentService) PutComment(commentId int, userId int, articleId int, text string, channel chan response.Result) {
 	comment, err := s.repository.PutComment(commentId, userId, articleId, text)
-	return comment, err
+	res := new(response.Result)
+	res.Comment = comment
+	res.Err = err
+	channel <- *res
 }
 
-func (s *commentService) DeleteComment(commentId int, userId int, articleId int) error {
+func (s *commentService) DeleteComment(commentId int, userId int, articleId int, channel chan response.Result) {
 	err := s.repository.DeleteComment(commentId, userId, articleId)
-	return err
+	res := new(response.Result)
+	res.Err = err
+	channel <- *res
 }
 
-func (s *commentService) VerifyComment(commentId int) (database.Comment, error) {
+func (s *commentService) VerifyComment(commentId int, channel chan response.Result) {
 	comment, err := s.repository.VerifyComment(commentId)
-	return comment, err
+	res := new(response.Result)
+	res.Comment = comment
+	res.Err = err
+	channel <- *res
 }

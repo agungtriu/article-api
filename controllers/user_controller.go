@@ -4,8 +4,9 @@ import (
 	"article-api/helper"
 	"article-api/middlewares"
 	"article-api/models/base"
+	profileResponse "article-api/models/profile/response"
 	"article-api/models/user/request"
-	"article-api/models/user/response"
+	userResponse "article-api/models/user/response"
 	"article-api/service"
 	"fmt"
 	"net/http"
@@ -76,43 +77,49 @@ func (controller *userController) RegisterController(c echo.Context) error {
 		})
 	}
 
-	_, err := controller.userService.VerifyUsername(requestRegister.Username)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.VerifyUsername(requestRegister.Username, channelUser)
+	user := <-channelUser
 
-	if err == nil {
+	if user.Err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username already registered",
 		})
 	}
 
-	_, err = controller.userService.VerifyEmail(requestRegister.Email)
+	go controller.userService.VerifyEmail(requestRegister.Email, channelUser)
+	user = <-channelUser
 
-	if err == nil {
+	if user.Err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Email already registered",
 		})
 	}
 
-	user, err := controller.userService.RegisterUser(requestRegister)
-	if err != nil {
+	go controller.userService.RegisterUser(requestRegister, channelUser)
+	user = <-channelUser
+	if user.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  user.Err.Error(),
 		})
 
 	}
-	_, err = controller.profileService.RegisterProfile(int(user.ID))
-	if err != nil {
+	channelProfile := make(chan profileResponse.Result)
+	go controller.profileService.RegisterProfile(int(user.User.ID), channelProfile)
+	profile := <-channelProfile
+	if profile.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  profile.Err.Error(),
 		})
 
 	}
 
-	var responseRegister response.Register
-	responseRegister.MapRegisterFromDatabase(user)
+	var responseRegister userResponse.Register
+	responseRegister.MapRegisterFromDatabase(user.User)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
@@ -141,16 +148,18 @@ func (controller *userController) LoginController(c echo.Context) error {
 		})
 	}
 
-	user, err := controller.userService.VerifyUsername(requestLogin.Username)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.VerifyUsername(requestLogin.Username, channelUser)
+	user := <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
 			Status: false,
 			Error:  requestLogin.Username + " was not registered",
 		})
 	}
 
-	isErr := helper.CheckPasswordHash(requestLogin.Password, user.Password)
+	isErr := helper.CheckPasswordHash(requestLogin.Password, user.User.Password)
 
 	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
@@ -159,8 +168,8 @@ func (controller *userController) LoginController(c echo.Context) error {
 		})
 	}
 
-	var responseLogin response.Login
-	responseLogin.MapLoginFromDatabase(user)
+	var responseLogin userResponse.Login
+	responseLogin.MapLoginFromDatabase(user.User)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
@@ -173,17 +182,19 @@ func (controller *userController) LoginController(c echo.Context) error {
 func (controller *userController) GetUserController(c echo.Context) error {
 	userId, _ := strconv.Atoi(c.Param("userId"))
 
-	user, err := controller.userService.GetUser(userId)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.GetUser(userId, channelUser)
+	user := <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "User not found",
 		})
 	}
 
-	var responseUser response.User
-	responseUser.MapUserFromDatabase(user)
+	var responseUser userResponse.User
+	responseUser.MapUserFromDatabase(user.User)
 
 	return c.JSON(http.StatusOK, base.DataResponse{
 		Status:  true,
@@ -222,9 +233,11 @@ func (controller *userController) ChangeUsernameController(c echo.Context) error
 		})
 	}
 
-	user, _ := controller.userService.GetUser(userId)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.GetUser(userId, channelUser)
+	user := <-channelUser
 
-	isErr := helper.CheckPasswordHash(requestChangeUsername.Password, user.Password)
+	isErr := helper.CheckPasswordHash(requestChangeUsername.Password, user.User.Password)
 
 	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
@@ -233,18 +246,20 @@ func (controller *userController) ChangeUsernameController(c echo.Context) error
 		})
 	}
 
-	_, err := controller.userService.VerifyUsername(requestChangeUsername.Username)
+	go controller.userService.VerifyUsername(requestChangeUsername.Username, channelUser)
+	user = <-channelUser
 
-	if err == nil {
+	if user.Err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Username already registered",
 		})
 	}
 
-	_, err = controller.userService.ChangeUsername(userId, requestChangeUsername.Username)
+	go controller.userService.ChangeUsername(userId, requestChangeUsername.Username, channelUser)
+	user = <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change username",
@@ -294,16 +309,18 @@ func (controller *userController) ChangePasswordController(c echo.Context) error
 		})
 	}
 
-	user, err := controller.userService.GetUser(userId)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.GetUser(userId, channelUser)
+	user := <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "User not found",
 		})
 	}
 
-	isErr := helper.CheckPasswordHash(requestChangePassword.OldPassword, user.Password)
+	isErr := helper.CheckPasswordHash(requestChangePassword.OldPassword, user.User.Password)
 
 	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
@@ -312,9 +329,10 @@ func (controller *userController) ChangePasswordController(c echo.Context) error
 		})
 	}
 
-	user, err = controller.userService.ChangePassword(userId, requestChangePassword.NewPassword)
+	go controller.userService.ChangePassword(userId, requestChangePassword.NewPassword, channelUser)
+	user = <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change password",
@@ -358,9 +376,11 @@ func (controller *userController) ChangeEmailController(c echo.Context) error {
 		})
 	}
 
-	user, _ := controller.userService.GetUser(userId)
+	channelUser := make(chan userResponse.Result)
+	go controller.userService.GetUser(userId, channelUser)
+	user := <-channelUser
 
-	isErr := helper.CheckPasswordHash(requestChangeEmail.Password, user.Password)
+	isErr := helper.CheckPasswordHash(requestChangeEmail.Password, user.User.Password)
 
 	if isErr {
 		return c.JSON(http.StatusUnauthorized, base.ErrorResponse{
@@ -369,18 +389,20 @@ func (controller *userController) ChangeEmailController(c echo.Context) error {
 		})
 	}
 
-	_, err := controller.userService.VerifyEmail(requestChangeEmail.Email)
+	go controller.userService.VerifyEmail(requestChangeEmail.Email, channelUser)
+	user = <-channelUser
 
-	if err == nil {
+	if user.Err == nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Email already registered",
 		})
 	}
 
-	user, err = controller.userService.ChangeEmail(userId, requestChangeEmail.Email)
+	go controller.userService.ChangeEmail(userId, requestChangeEmail.Email, channelUser)
+	user = <-channelUser
 
-	if err != nil {
+	if user.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: true,
 			Error:  "Failed to change email",
