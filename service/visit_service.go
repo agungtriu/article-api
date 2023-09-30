@@ -1,9 +1,11 @@
 package service
 
-import "article-api/repository"
+import (
+	"article-api/repository"
+)
 
 type VisitService interface {
-	PostVisit(articleId int) error
+	PostVisit(articleId int)
 }
 
 type visitService struct {
@@ -13,7 +15,6 @@ type visitService struct {
 func NewVisitService(repository repository.VisitRepository) *visitService {
 	return &visitService{repository}
 }
-func (s *visitService) PostVisit(articleId int) error {
-	err := s.repository.PostVisit(articleId)
-	return err
+func (s *visitService) PostVisit(articleId int) {
+	s.repository.PostVisit(articleId)
 }

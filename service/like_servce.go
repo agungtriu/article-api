@@ -1,14 +1,14 @@
 package service
 
 import (
-	"article-api/models/like/database"
+	"article-api/models/like/response"
 	"article-api/repository"
 )
 
 type LikeService interface {
-	PostLike(userId int, articleId int) (database.Like, error)
-	DeleteLike(userId int, articleId int) error
-	VerifyLike(articleId int, userId int) (database.Like, error)
+	PostLike(userId int, articleId int, channel chan response.Result)
+	DeleteLike(userId int, articleId int, channel chan response.Result)
+	VerifyLike(articleId int, userId int, channel chan response.Result)
 }
 
 type likeService struct {
@@ -19,17 +19,25 @@ func NewLikeService(repository repository.LikeRepository) *likeService {
 	return &likeService{repository}
 }
 
-func (s *likeService) PostLike(userId int, articleId int) (database.Like, error) {
+func (s *likeService) PostLike(userId int, articleId int, channel chan response.Result) {
 	like, err := s.repository.PostLike(userId, articleId)
-	return like, err
+	res := new(response.Result)
+	res.Like = like
+	res.Err = err
+	channel <- *res
 }
 
-func (s *likeService) DeleteLike(userId int, articleId int) error {
+func (s *likeService) DeleteLike(userId int, articleId int, channel chan response.Result) {
 	err := s.repository.DeleteLike(userId, articleId)
-	return err
+	res := new(response.Result)
+	res.Err = err
+	channel <- *res
 }
 
-func (s *likeService) VerifyLike(articleId int, userId int) (database.Like, error) {
+func (s *likeService) VerifyLike(articleId int, userId int, channel chan response.Result) {
 	like, err := s.repository.VerifyLike(articleId, userId)
-	return like, err
+	res := new(response.Result)
+	res.Like = like
+	res.Err = err
+	channel <- *res
 }

@@ -2,9 +2,10 @@ package controllers
 
 import (
 	"article-api/middlewares"
+	"article-api/models/article/response"
 	"article-api/models/base"
 	"article-api/models/comment/request"
-	"article-api/models/comment/response"
+	commentResponse "article-api/models/comment/response"
 	"article-api/service"
 	"fmt"
 	"net/http"
@@ -29,9 +30,14 @@ func (controller *commentController) AddCommentController(c echo.Context) error 
 
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
-	_, err := controller.articleService.GetArticle(articleId)
 
-	if err != nil {
+	channelArticle := make(chan response.Result)
+
+	go controller.articleService.GetArticle(articleId, channelArticle)
+
+	article := <-channelArticle
+
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
@@ -41,17 +47,20 @@ func (controller *commentController) AddCommentController(c echo.Context) error 
 	var commentRequest request.Comment
 	c.Bind(&commentRequest)
 
-	comment, err := controller.commentService.PostComment(userId, articleId, commentRequest)
+	channelComment := make(chan commentResponse.Result)
+	go controller.commentService.PostComment(userId, articleId, commentRequest, channelComment)
 
-	if err != nil {
+	comment := <-channelComment
+
+	if comment.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  comment.Err.Error(),
 		})
 	}
 
-	var responseComment response.AddComment
-	responseComment.MapAddCommentFromDatabase(comment)
+	var responseComment commentResponse.AddComment
+	responseComment.MapAddCommentFromDatabase(comment.Comment)
 
 	return c.JSON(http.StatusCreated, base.DataResponse{
 		Status:  true,
@@ -72,36 +81,42 @@ func (controller *commentController) UpdateCommentController(c echo.Context) err
 	var requestComment request.Comment
 	c.Bind(&requestComment)
 
-	_, err := controller.articleService.VerifyArticle(articleId)
+	channel := make(chan response.Result)
 
-	if err != nil {
+	go controller.articleService.VerifyArticle(articleId, channel)
+
+	article := <-channel
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	comment, err := controller.commentService.VerifyComment(commentId)
+	channelComment := make(chan commentResponse.Result)
+	go controller.commentService.VerifyComment(commentId, channelComment)
 
-	if err != nil {
+	comment := <-channelComment
+	if comment.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Comment not found",
 		})
 	}
 
-	if userId != comment.UserId {
+	if userId != comment.Comment.UserId {
 		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})
 	}
 
-	comment, err = controller.commentService.PutComment(commentId, userId, articleId, requestComment.Text)
-	if err != nil {
+	go controller.commentService.PutComment(commentId, userId, articleId, requestComment.Text, channelComment)
+	comment = <-channelComment
+	if comment.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  comment.Err.Error(),
 		})
 	}
 
@@ -120,35 +135,41 @@ func (controller *commentController) DeleteCommentController(c echo.Context) err
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 	commentId, _ := strconv.Atoi(c.Param("commentId"))
 
-	_, err := controller.articleService.VerifyArticle(articleId)
+	channel := make(chan response.Result)
+	go controller.articleService.VerifyArticle(articleId, channel)
 
-	if err != nil {
+	article := <-channel
+
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	comment, err := controller.commentService.VerifyComment(commentId)
-	if err != nil {
+	channelComment := make(chan commentResponse.Result)
+	go controller.commentService.VerifyComment(commentId, channelComment)
+	comment := <-channelComment
+	if comment.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Comment not found",
 		})
 	}
 
-	if userId != comment.UserId {
+	if userId != comment.Comment.UserId {
 		return c.JSON(http.StatusForbidden, base.ErrorResponse{
 			Status: false,
 			Error:  "Unauthorized Access",
 		})
 	}
 
-	err = controller.commentService.DeleteComment(commentId, userId, articleId)
-	if err != nil {
+	go controller.commentService.DeleteComment(commentId, userId, articleId, channelComment)
+	comment = <-channelComment
+	if comment.Err != nil {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  comment.Err.Error(),
 		})
 	}
 

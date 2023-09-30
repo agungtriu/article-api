@@ -4,6 +4,7 @@ import (
 	"article-api/middlewares"
 	"article-api/models/base"
 	"article-api/models/profile/request"
+	"article-api/models/profile/response"
 	"article-api/service"
 	"fmt"
 	"net/http"
@@ -36,12 +37,14 @@ func (controller *profileController) ChangeProfileController(c echo.Context) err
 			Error:  "Name cannot be empty",
 		})
 	}
+	channelProfile := make(chan response.Result)
+	go controller.profileService.ChangeProfile(userId, requestChangeProfile, channelProfile)
+	profile := <-channelProfile
 
-	_, err := controller.profileService.ChangeProfile(userId, requestChangeProfile)
-	if err != nil {
+	if profile.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  profile.Err.Error(),
 		})
 	}
 	return c.JSON(http.StatusCreated, base.BaseResponse{

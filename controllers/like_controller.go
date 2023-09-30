@@ -2,7 +2,9 @@ package controllers
 
 import (
 	"article-api/middlewares"
+	articleResponse "article-api/models/article/response"
 	"article-api/models/base"
+	likeResponse "article-api/models/like/response"
 	"article-api/service"
 	"fmt"
 	"net/http"
@@ -29,30 +31,35 @@ func (controller *likeController) AddLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	_, err := controller.articleService.VerifyArticle(articleId)
+	channelArticle := make(chan articleResponse.Result)
+	go controller.articleService.VerifyArticle(articleId, channelArticle)
 
-	if err != nil {
+	article := <-channelArticle
+
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
+	channelLike := make(chan likeResponse.Result)
+	go controller.likeService.VerifyLike(articleId, userId, channelLike)
+	like := <-channelLike
 
-	like, _ := controller.likeService.VerifyLike(articleId, userId)
-
-	if like.ID != 0 {
+	if like.Like.ID != 0 {
 		return c.JSON(http.StatusBadRequest, base.ErrorResponse{
 			Status: false,
 			Error:  "Cannot double like article",
 		})
 	}
 
-	like, err = controller.likeService.PostLike(userId, articleId)
+	go controller.likeService.PostLike(userId, articleId, channelLike)
+	like = <-channelLike
 
-	if err != nil {
+	if like.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  like.Err.Error(),
 		})
 	}
 
@@ -70,29 +77,35 @@ func (controller *likeController) DeleteLikeController(c echo.Context) error {
 	userId, _ := strconv.Atoi(fmt.Sprintf("%v", claims["userId"]))
 	articleId, _ := strconv.Atoi(c.Param("articleId"))
 
-	_, err := controller.articleService.VerifyArticle(articleId)
+	channelArticle := make(chan articleResponse.Result)
+	go controller.articleService.VerifyArticle(articleId, channelArticle)
 
-	if err != nil {
+	article := <-channelArticle
+
+	if article.Err != nil {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Article not found",
 		})
 	}
 
-	like, _ := controller.likeService.VerifyLike(articleId, userId)
+	channelLike := make(chan likeResponse.Result)
+	go controller.likeService.VerifyLike(articleId, userId, channelLike)
+	like := <-channelLike
 
-	if like.ID == 0 {
+	if like.Like.ID == 0 {
 		return c.JSON(http.StatusNotFound, base.ErrorResponse{
 			Status: false,
 			Error:  "Like not found",
 		})
 	}
 
-	err = controller.likeService.DeleteLike(userId, articleId)
-	if err != nil {
+	go controller.likeService.DeleteLike(userId, articleId, channelLike)
+	like = <-channelLike
+	if like.Err != nil {
 		return c.JSON(http.StatusInternalServerError, base.ErrorResponse{
 			Status: false,
-			Error:  err.Error(),
+			Error:  like.Err.Error(),
 		})
 	}
 
